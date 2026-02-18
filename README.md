@@ -45,7 +45,7 @@ The gateway hosts multiple A2A agents at a single domain with path-based routing
 
 ## Architecture
 
-![A2A Gateway Architecture](diagrams/architecture.png)
+![A2A Gateway Architecture](diagrams/a2a-gateway.png)
 
 ### Components
 
