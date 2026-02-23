@@ -522,7 +522,7 @@ The gateway proxies A2A messages without modification.
 
 ### API Gateway Timeout
 
-API Gateway REST API has a default 29-second integration timeout. For long-running agent operations, request an AWS quota increase (up to 15 minutes).
+API Gateway REST API has a default 29-second integration timeout. For long-running agent operations, request an AWS quota increase.
 
 ## Clean Up
 
