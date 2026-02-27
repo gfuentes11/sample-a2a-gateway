@@ -66,6 +66,22 @@ resource "aws_security_group" "lambda" {
     description = "HTTPS to VPC endpoints and private backends"
   }
 
+  egress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [aws_vpc_endpoint.dynamodb.prefix_list_id]
+    description     = "HTTPS to DynamoDB via Gateway endpoint"
+  }
+
+  egress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [aws_vpc_endpoint.s3.prefix_list_id]
+    description     = "HTTPS to S3 via Gateway endpoint"
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-lambda-sg"
   }
