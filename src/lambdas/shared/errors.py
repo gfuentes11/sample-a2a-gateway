@@ -78,3 +78,14 @@ INVALID_PATH_FORMAT = "INVALID_PATH_FORMAT"
 BACKEND_UNREACHABLE = "BACKEND_UNREACHABLE"
 OAUTH_ERROR = "OAUTH_ERROR"
 STREAM_IDLE_TIMEOUT = "STREAM_IDLE_TIMEOUT"
+RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+
+
+class RateLimitError(GatewayError):
+    """Rate limit exceeded error (429)."""
+    
+    def __init__(self, message: str = "Rate limit exceeded", retry_after: int = None):
+        details = {}
+        if retry_after:
+            details['retryAfterSeconds'] = retry_after
+        super().__init__(RATE_LIMIT_EXCEEDED, message, 429, details)

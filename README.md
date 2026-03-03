@@ -40,6 +40,7 @@ The gateway hosts multiple A2A agents at a single domain with path-based routing
 - ✅ Fully A2A protocol compliant
 - ✅ Dual protocol binding support (HTTP+JSON/REST and JSON-RPC)
 - ✅ Fine-grained access control via Cognito JWT scopes
+- ✅ Per-user rate limiting via DynamoDB
 - ✅ Semantic search for agent discovery via S3 Vectors
 - ✅ SSE streaming support for `message:stream` operations
 - ✅ OAuth 2.0 Client Credentials flow for backend authentication
@@ -66,7 +67,8 @@ The gateway hosts multiple A2A agents at a single domain with path-based routing
 
 **DynamoDB Tables**
 - **AgentRegistry**: Maps agent IDs to backend URLs, auth configs, cached agent cards
-- **Permissions**: Maps user scopes to allowed agents
+- **Permissions**: Maps user scopes to allowed agents and rate limits
+- **RateLimitCounters**: Tracks per-user request counts per minute (auto-expires via TTL)
 
 **Secrets Manager**
 - Stores OAuth client secrets for backend authentication
@@ -559,11 +561,18 @@ The gateway operates on a **trust-after-authentication** model. Once a backend a
 
 ### Rate Limiting
 
-This sample does not implement rate limiting. Without throttling:
+Per-user, per-agent rate limiting is configured via the Permissions table. Add `requestsPerMinute` for a default limit and `agentLimits` for per-agent overrides:
 
-- Excessive API calls could lead to unexpected AWS costs
-- A single client could degrade service for others
-- **Production recommendation**: Configure API Gateway throttling, Lambda concurrency limits, and AWS Budgets with alerts.
+```bash
+aws dynamodb put-item --table-name <permissions-table> --item '{
+  "scope": {"S": "billing:read"},
+  "allowedAgents": {"L": [{"S": "cheap-agent"}, {"S": "expensive-agent"}]},
+  "requestsPerMinute": {"N": "100"},
+  "agentLimits": {"M": {"expensive-agent": {"N": "10"}}}
+}'
+```
+
+In this example, `cheap-agent` gets 100/min (default) and `expensive-agent` gets 10/min (override). When a user has multiple scopes, the highest limit for each agent applies. Scopes without any rate limit config have unlimited access. Exceeding the limit returns HTTP 429 with `retryAfterSeconds`.
 
 ### CORS Configuration
 

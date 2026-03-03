@@ -37,3 +37,24 @@ resource "aws_dynamodb_table" "permissions" {
     Name = "${var.project_name}-${var.environment}-permissions"
   }
 }
+
+# Rate Limit Counters Table
+resource "aws_dynamodb_table" "rate_limit_counters" {
+  name         = "${var.project_name}-${var.environment}-rate-limit-counters"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-rate-limit-counters"
+  }
+}

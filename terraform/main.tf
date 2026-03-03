@@ -42,7 +42,8 @@ resource "null_resource" "build_proxy_container" {
       filemd5("${path.module}/../src/lambdas/shared/dynamodb_client.py"),
       filemd5("${path.module}/../src/lambdas/shared/errors.py"),
       filemd5("${path.module}/../src/lambdas/shared/oauth_client.py"),
-      filemd5("${path.module}/../src/lambdas/shared/url_rewriter.py")
+      filemd5("${path.module}/../src/lambdas/shared/url_rewriter.py"),
+      filemd5("${path.module}/../src/lambdas/shared/rate_limit_client.py")
     ]))
     ecr_repo        = module.ecr.proxy_repository_url
   }
@@ -87,12 +88,14 @@ module "vpc" {
 module "lambda_functions" {
   source = "./modules/lambda-functions"
 
-  project_name              = var.project_name
-  environment               = var.environment
-  agent_registry_table_name = module.dynamodb.agent_registry_table_name
-  agent_registry_table_arn  = module.dynamodb.agent_registry_table_arn
-  permissions_table_name    = module.dynamodb.permissions_table_name
-  permissions_table_arn     = module.dynamodb.permissions_table_arn
+  project_name                     = var.project_name
+  environment                      = var.environment
+  agent_registry_table_name        = module.dynamodb.agent_registry_table_name
+  agent_registry_table_arn         = module.dynamodb.agent_registry_table_arn
+  permissions_table_name           = module.dynamodb.permissions_table_name
+  permissions_table_arn            = module.dynamodb.permissions_table_arn
+  rate_limit_counters_table_name   = module.dynamodb.rate_limit_counters_table_name
+  rate_limit_counters_table_arn    = module.dynamodb.rate_limit_counters_table_arn
   cognito_user_pool_id      = module.cognito.user_pool_id
   cognito_issuer_url        = module.cognito.issuer_url
   cognito_jwks_uri          = module.cognito.jwks_uri
@@ -189,7 +192,7 @@ resource "null_resource" "update_proxy_lambda" {
     command = <<-EOT
       aws lambda update-function-configuration \
         --function-name ${module.lambda_functions.proxy_lambda_name} \
-        --environment "Variables={AGENT_REGISTRY_TABLE=${module.dynamodb.agent_registry_table_name},PERMISSIONS_TABLE=${module.dynamodb.permissions_table_name},GATEWAY_DOMAIN=${local.gateway_domain},LOG_LEVEL=INFO}" \
+        --environment "Variables={AGENT_REGISTRY_TABLE=${module.dynamodb.agent_registry_table_name},PERMISSIONS_TABLE=${module.dynamodb.permissions_table_name},RATE_LIMIT_TABLE=${module.dynamodb.rate_limit_counters_table_name},GATEWAY_DOMAIN=${local.gateway_domain},LOG_LEVEL=INFO}" \
         --region ${var.aws_region}
     EOT
   }

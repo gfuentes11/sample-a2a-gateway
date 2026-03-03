@@ -22,9 +22,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.dynamodb_client import DynamoDBClient, create_client_from_env
 from shared.oauth_client import OAuthClient
 from shared.url_rewriter import rewrite_agent_card_urls
+from shared.rate_limit_client import RateLimitClient, create_rate_limit_client
 from shared.errors import (
     GatewayError, BadRequestError, NotFoundError,
     BackendError, TimeoutError as GatewayTimeoutError,
+    RateLimitError, RATE_LIMIT_EXCEEDED,
     INVALID_PATH_FORMAT, AGENT_NOT_FOUND,
     BACKEND_UNREACHABLE, OAUTH_ERROR, STREAM_IDLE_TIMEOUT
 )
@@ -43,6 +45,7 @@ EXCLUDED_HEADERS = {
 # Global clients (reused across requests for Lambda warm starts)
 _db_client: Optional[DynamoDBClient] = None
 _oauth_client: Optional[OAuthClient] = None
+_rate_limit_client: Optional[RateLimitClient] = None
 
 
 def get_db_client() -> DynamoDBClient:
@@ -59,6 +62,14 @@ def get_oauth_client() -> OAuthClient:
     if _oauth_client is None:
         _oauth_client = OAuthClient()
     return _oauth_client
+
+
+def get_rate_limit_client() -> Optional[RateLimitClient]:
+    """Get or create rate limit client."""
+    global _rate_limit_client
+    if _rate_limit_client is None:
+        _rate_limit_client = create_rate_limit_client()
+    return _rate_limit_client
 
 
 @asynccontextmanager
@@ -79,11 +90,14 @@ app = FastAPI(
 class UserContext:
     """User context extracted from API Gateway authorizer."""
     
-    def __init__(self, user_id: str, scopes: list, roles: list, username: str):
+    def __init__(self, user_id: str, scopes: list, roles: list, username: str, 
+                 requests_per_minute: str = '', agent_limits: dict = None):
         self.user_id = user_id
         self.scopes = scopes
         self.roles = roles
         self.username = username
+        self.requests_per_minute = requests_per_minute
+        self.agent_limits = agent_limits or {}
 
 
 def extract_user_context(request: Request) -> UserContext:
@@ -106,16 +120,71 @@ def extract_user_context(request: Request) -> UserContext:
     scopes_csv = authorizer.get('scopes', '')
     roles_csv = authorizer.get('roles', '')
     username = authorizer.get('username', '')
+    requests_per_minute = authorizer.get('requestsPerMinute', '')
+    
+    # Parse agent limits JSON
+    agent_limits_str = authorizer.get('agentLimits', '')
+    agent_limits = {}
+    if agent_limits_str:
+        try:
+            agent_limits = json.loads(agent_limits_str)
+        except json.JSONDecodeError:
+            pass
     
     scopes = [s.strip() for s in scopes_csv.split(',') if s.strip()]
     roles = [r.strip() for r in roles_csv.split(',') if r.strip()]
     
-    return UserContext(user_id, scopes, roles, username)
+    return UserContext(user_id, scopes, roles, username, requests_per_minute, agent_limits)
 
 
 def is_streaming_operation(operation: str) -> bool:
     """Check if operation requires streaming response."""
     return 'message:stream' in operation
+
+
+def check_rate_limit(user_context: UserContext, agent_id: str) -> None:
+    """
+    Check rate limit for user and agent, raise HTTPException if exceeded.
+    
+    Args:
+        user_context: User context with rate limit info
+        agent_id: Agent being accessed
+        
+    Raises:
+        HTTPException: If rate limit exceeded (429)
+    """
+    # Determine effective rate limit for this agent
+    effective_limit = None
+    if agent_id in user_context.agent_limits:
+        effective_limit = int(user_context.agent_limits[agent_id])
+    elif user_context.requests_per_minute:
+        effective_limit = int(user_context.requests_per_minute)
+    
+    if not effective_limit:
+        return  # No rate limit configured
+    
+    rate_limit_client = get_rate_limit_client()
+    
+    if not rate_limit_client:
+        return  # Rate limit table not configured
+    
+    allowed, retry_after = rate_limit_client.check_rate_limit(
+        user_context.user_id,
+        agent_id,
+        effective_limit
+    )
+    
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                'error': {
+                    'code': RATE_LIMIT_EXCEEDED,
+                    'message': 'Rate limit exceeded. Try again later.',
+                    'details': {'retryAfterSeconds': retry_after}
+                }
+            }
+        )
 
 
 def transform_a2a_to_bedrock_format(data: Any) -> Any:
@@ -244,6 +313,9 @@ async def proxy_jsonrpc_request(
     logger.info(f"JSON-RPC request: POST /agents/{agent_id}")
     logger.info(f"User: {user_context.user_id}, Scopes: {user_context.scopes}")
     
+    # Check rate limit before processing
+    check_rate_limit(user_context, agent_id)
+    
     # Get agent from registry
     agent = db_client.get_agent(agent_id)
     
@@ -351,6 +423,9 @@ async def proxy_request(
     user_context = extract_user_context(request)
     logger.info(f"Proxy request: {request.method} /agents/{agent_id}/{operation}")
     logger.info(f"User: {user_context.user_id}, Scopes: {user_context.scopes}")
+    
+    # Check rate limit before processing
+    check_rate_limit(user_context, agent_id)
     
     # Get agent from registry
     agent = db_client.get_agent(agent_id)
@@ -706,6 +781,19 @@ async def gateway_error_handler(request: Request, exc: GatewayError):
         status_code=exc.status_code,
         content=exc.to_dict(),
         headers={'Access-Control-Allow-Origin': '*'}
+    )
+
+
+@app.exception_handler(RateLimitError)
+async def rate_limit_error_handler(request: Request, exc: RateLimitError):
+    """Handle RateLimitError exceptions."""
+    return JSONResponse(
+        status_code=429,
+        content=exc.to_dict(),
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Retry-After': str(exc.details.get('retryAfterSeconds', 60))
+        }
     )
 
 

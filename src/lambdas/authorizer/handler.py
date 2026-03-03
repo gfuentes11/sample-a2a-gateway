@@ -3,7 +3,7 @@
 import os
 import json
 import logging
-from typing import Dict, Any, List, Set
+from typing import Dict, Any, List, Set, Optional
 
 # Add parent directory to path for imports
 import sys
@@ -48,11 +48,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Token validated for user: {user_context['userId']}, scopes: {user_context['scopes']}")
         
-        # Query DynamoDB for allowed agents based on user's scopes
+        # Query DynamoDB for allowed agents and rate limit based on user's scopes
         db_client = create_client_from_env()
-        allowed_agents = db_client.get_allowed_agents_for_scopes(user_context['scopes'])
+        allowed_agents, rate_limit, agent_limits = db_client.get_allowed_agents_and_rate_limit(user_context['scopes'])
         
-        logger.info(f"User {user_context['userId']} allowed agents: {allowed_agents}")
+        logger.info(f"User {user_context['userId']} allowed agents: {allowed_agents}, rate limit: {rate_limit}, agent limits: {agent_limits}")
         
         # Generate policy with specific agent resource ARNs
         policy = generate_policy(
@@ -60,7 +60,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             effect='Allow',
             method_arn=event['methodArn'],
             allowed_agents=allowed_agents,
-            context=user_context
+            context=user_context,
+            rate_limit=rate_limit,
+            agent_limits=agent_limits
         )
         
         return policy
@@ -115,7 +117,9 @@ def generate_policy(
     effect: str,
     method_arn: str,
     allowed_agents: Set[str],
-    context: Dict[str, Any]
+    context: Dict[str, Any],
+    rate_limit: Optional[int] = None,
+    agent_limits: Optional[Dict[str, int]] = None
 ) -> Dict[str, Any]:
     """
     Generate IAM policy document with agent-specific resource ARNs.
@@ -126,6 +130,8 @@ def generate_policy(
         method_arn: Original method ARN from request
         allowed_agents: Set of agent IDs the user can access
         context: User context to pass to downstream Lambdas
+        rate_limit: Optional default requests per minute limit
+        agent_limits: Optional per-agent rate limit overrides
         
     Returns:
         IAM policy document with specific agent resources
@@ -182,7 +188,9 @@ def generate_policy(
             'scopes': ','.join(context['scopes']),  # Convert list to CSV
             'roles': ','.join(context['roles']),    # Convert list to CSV
             'username': context.get('username', ''),
-            'allowedAgents': ','.join(sorted(allowed_agents))  # Pass to downstream for logging
+            'allowedAgents': ','.join(sorted(allowed_agents)),  # Pass to downstream for logging
+            'requestsPerMinute': str(rate_limit) if rate_limit else '',  # Default rate limit
+            'agentLimits': json.dumps(agent_limits) if agent_limits else ''  # Per-agent overrides as JSON
         }
     }
     

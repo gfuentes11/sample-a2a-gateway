@@ -20,9 +20,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from shared.dynamodb_client import create_client_from_env
 from shared.oauth_client import OAuthClient
 from shared.url_rewriter import rewrite_agent_card_urls
+from shared.rate_limit_client import create_rate_limit_client
 from shared.errors import (
     GatewayError, BadRequestError, NotFoundError,
     BackendError, TimeoutError as GatewayTimeoutError,
+    RateLimitError,
     INVALID_PATH_FORMAT, AGENT_NOT_FOUND,
     BACKEND_UNREACHABLE, OAUTH_ERROR, STREAM_IDLE_TIMEOUT
 )
@@ -74,6 +76,34 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Parse path to extract agent ID and operation (if REST style)
         agent_id, operation = parse_path(event['path'])
         logger.info(f"Agent: {agent_id}, Operation: {operation}")
+        
+        # Check rate limit before any other processing
+        # Use agent-specific limit if defined, otherwise fall back to default
+        agent_limits = user_context.get('agentLimits', {})
+        rate_limit_str = user_context.get('requestsPerMinute', '')
+        
+        # Determine effective rate limit for this agent
+        effective_limit = None
+        if agent_id in agent_limits:
+            effective_limit = int(agent_limits[agent_id])
+        elif rate_limit_str:
+            effective_limit = int(rate_limit_str)
+        
+        if effective_limit:
+            rate_limit_client = create_rate_limit_client()
+            
+            if rate_limit_client:
+                allowed, retry_after = rate_limit_client.check_rate_limit(
+                    user_context['userId'],
+                    agent_id,
+                    effective_limit
+                )
+                
+                if not allowed:
+                    raise RateLimitError(
+                        "Rate limit exceeded. Try again later.",
+                        retry_after
+                    )
         
         # Detect protocol binding from request body
         body = event.get('body')
@@ -313,6 +343,7 @@ def map_http_to_jsonrpc_error_code(status_code: int, error_code: str) -> int:
         'CONTENT_TYPE_NOT_SUPPORTED': -32005,
         'INVALID_AGENT_RESPONSE': -32006,
         AGENT_NOT_FOUND: -32001,  # Map to TaskNotFound equivalent
+        'RATE_LIMIT_EXCEEDED': -32029,  # Rate limit error code
     }
     
     if error_code in a2a_error_map:
@@ -325,6 +356,8 @@ def map_http_to_jsonrpc_error_code(status_code: int, error_code: str) -> int:
         return -32600  # Invalid request
     elif status_code == 404:
         return -32001  # Task/resource not found
+    elif status_code == 429:
+        return -32029  # Rate limit exceeded
     elif status_code == 500:
         return -32603  # Internal error
     elif status_code == 502 or status_code == 504:
@@ -687,7 +720,7 @@ def extract_user_context(event: Dict[str, Any]) -> Dict[str, Any]:
         event: API Gateway event
         
     Returns:
-        Dict with userId, scopes, roles
+        Dict with userId, scopes, roles, requestsPerMinute, agentLimits
     """
     request_context = event.get('requestContext', {})
     authorizer_context = request_context.get('authorizer', {})
@@ -699,11 +732,22 @@ def extract_user_context(event: Dict[str, Any]) -> Dict[str, Any]:
     scopes = [s.strip() for s in scopes_csv.split(',') if s.strip()]
     roles = [r.strip() for r in roles_csv.split(',') if r.strip()]
     
+    # Parse agent limits JSON
+    agent_limits_str = authorizer_context.get('agentLimits', '')
+    agent_limits = {}
+    if agent_limits_str:
+        try:
+            agent_limits = json.loads(agent_limits_str)
+        except json.JSONDecodeError:
+            pass
+    
     return {
         'userId': user_id,
         'scopes': scopes,
         'roles': roles,
-        'username': authorizer_context.get('username', '')
+        'username': authorizer_context.get('username', ''),
+        'requestsPerMinute': authorizer_context.get('requestsPerMinute', ''),
+        'agentLimits': agent_limits
     }
 
 
