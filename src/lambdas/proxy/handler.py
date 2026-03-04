@@ -1,5 +1,9 @@
 """Proxy Lambda for routing A2A requests to backend agents.
 
+DEPRECATED: This zip-based Lambda is no longer deployed. The production proxy
+uses the FastAPI container in proxy_container/app/main.py which supports
+streaming via Lambda Web Adapter. This file is kept for unit tests only.
+
 Supports both HTTP+JSON/REST and JSON-RPC protocol bindings.
 All backends are assumed to be JSON-RPC (AgentCore runtime).
 - HTTP+REST requests are translated to JSON-RPC before forwarding

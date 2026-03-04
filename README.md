@@ -537,6 +537,7 @@ aws dynamodb get-item \
   /authorizer       - JWT validation
   /registry         - Agent discovery
   /search           - Semantic agent discovery via S3 Vectors
+  /proxy            - DEPRECATED: kept for unit tests only (not deployed)
   /proxy_container  - A2A routing with streaming (FastAPI + Lambda Web Adapter)
   /admin            - Agent management
   /shared           - Common utilities
