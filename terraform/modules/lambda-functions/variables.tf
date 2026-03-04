@@ -28,6 +28,16 @@ variable "permissions_table_arn" {
   type        = string
 }
 
+variable "rate_limit_counters_table_name" {
+  description = "Name of the RateLimitCounters DynamoDB table"
+  type        = string
+}
+
+variable "rate_limit_counters_table_arn" {
+  description = "ARN of the RateLimitCounters DynamoDB table"
+  type        = string
+}
+
 variable "cognito_user_pool_id" {
   description = "Cognito User Pool ID"
   type        = string

@@ -186,7 +186,11 @@ class TestLambdaHandler:
         
         # Mock DynamoDB client
         mock_db_client = Mock()
-        mock_db_client.get_allowed_agents_for_scopes.return_value = {'billing-agent', 'support-agent'}
+        mock_db_client.get_allowed_agents_and_rate_limit.return_value = (
+            {'billing-agent', 'support-agent'}, 
+            60, 
+            {'billing-agent': 30}
+        )
         mock_create_db_client.return_value = mock_db_client
         
         event = {
@@ -203,6 +207,8 @@ class TestLambdaHandler:
         assert result['policyDocument']['Statement'][0]['Effect'] == 'Allow'
         assert result['context']['userId'] == 'user-123'
         assert 'billing:read' in result['context']['scopes']
+        assert result['context']['requestsPerMinute'] == '60'
+        assert '"billing-agent": 30' in result['context']['agentLimits']
         
         # Verify agent-specific resources
         resources = result['policyDocument']['Statement'][0]['Resource']
@@ -210,7 +216,7 @@ class TestLambdaHandler:
         assert any('support-agent' in r for r in resources)
         
         # Verify DynamoDB was called with correct scopes
-        mock_db_client.get_allowed_agents_for_scopes.assert_called_once_with(['billing:read', 'billing:write'])
+        mock_db_client.get_allowed_agents_and_rate_limit.assert_called_once_with(['billing:read', 'billing:write'])
     
     @patch('authorizer.handler.create_client_from_env')
     @patch('authorizer.handler.create_validator_from_env')
@@ -232,9 +238,9 @@ class TestLambdaHandler:
         }
         mock_create_validator.return_value = mock_validator
         
-        # Mock DynamoDB client - no agents allowed
+        # Mock DynamoDB client - no agents allowed, no rate limit
         mock_db_client = Mock()
-        mock_db_client.get_allowed_agents_for_scopes.return_value = set()
+        mock_db_client.get_allowed_agents_and_rate_limit.return_value = (set(), None, {})
         mock_create_db_client.return_value = mock_db_client
         
         event = {
@@ -250,6 +256,8 @@ class TestLambdaHandler:
         # Should still get Allow policy (for registry and search endpoints)
         assert result['principalId'] == 'user-123'
         assert result['policyDocument']['Statement'][0]['Effect'] == 'Allow'
+        assert result['context']['requestsPerMinute'] == ''
+        assert result['context']['agentLimits'] == ''
         
         # Registry and search endpoints in resources (both do their own filtering)
         resources = result['policyDocument']['Statement'][0]['Resource']
@@ -330,7 +338,7 @@ class TestLambdaHandler:
         
         # Mock DynamoDB client to raise error
         mock_db_client = Mock()
-        mock_db_client.get_allowed_agents_for_scopes.side_effect = Exception("DynamoDB error")
+        mock_db_client.get_allowed_agents_and_rate_limit.side_effect = Exception("DynamoDB error")
         mock_create_db_client.return_value = mock_db_client
         
         event = {

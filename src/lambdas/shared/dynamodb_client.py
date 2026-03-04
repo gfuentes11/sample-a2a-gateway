@@ -2,7 +2,7 @@
 
 import os
 import boto3
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional, Set, Tuple
 from botocore.exceptions import ClientError
 
 
@@ -81,7 +81,22 @@ class DynamoDBClient:
         Returns:
             Set of allowed agent IDs (union of all scopes)
         """
+        allowed_agents, _, _ = self.get_allowed_agents_and_rate_limit(scopes)
+        return allowed_agents
+    
+    def get_allowed_agents_and_rate_limit(self, scopes: List[str]) -> Tuple[Set[str], Optional[int], Dict[str, int]]:
+        """
+        Get allowed agent IDs and rate limits for given scopes.
+        
+        Args:
+            scopes: List of user scopes
+            
+        Returns:
+            Tuple of (allowed_agents set, default requests_per_minute or None, agent_limits dict)
+        """
         allowed_agents: Set[str] = set()
+        rate_limits: List[int] = []
+        agent_limits: Dict[str, int] = {}
         
         for scope in scopes:
             try:
@@ -90,16 +105,27 @@ class DynamoDBClient:
                 )
                 
                 if 'Item' in response:
+                    item = response['Item']
                     # Add allowed agents from this scope
-                    scope_agents = response['Item'].get('allowedAgents', [])
+                    scope_agents = item.get('allowedAgents', [])
                     allowed_agents.update(scope_agents)
+                    # Collect rate limit if present
+                    if 'requestsPerMinute' in item:
+                        rate_limits.append(int(item['requestsPerMinute']))
+                    # Collect per-agent limits (higher limit wins if multiple scopes define same agent)
+                    scope_agent_limits = item.get('agentLimits', {})
+                    for agent_id, limit in scope_agent_limits.items():
+                        current = agent_limits.get(agent_id, 0)
+                        agent_limits[agent_id] = max(current, int(limit))
                     
             except ClientError as e:
                 # Log but continue - don't fail if one scope lookup fails
                 print(f"Warning: Failed to get permissions for scope {scope}: {e}")
                 continue
         
-        return allowed_agents
+        # Use most permissive (highest) rate limit as default
+        rate_limit = max(rate_limits) if rate_limits else None
+        return allowed_agents, rate_limit, agent_limits
     
     def put_agent(self, agent_item: Dict[str, Any]) -> None:
         """

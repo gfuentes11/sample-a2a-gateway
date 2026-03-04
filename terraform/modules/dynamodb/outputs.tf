@@ -17,3 +17,13 @@ output "permissions_table_arn" {
   description = "ARN of the Permissions DynamoDB table"
   value       = aws_dynamodb_table.permissions.arn
 }
+
+output "rate_limit_counters_table_name" {
+  description = "Name of the RateLimitCounters DynamoDB table"
+  value       = aws_dynamodb_table.rate_limit_counters.name
+}
+
+output "rate_limit_counters_table_arn" {
+  description = "ARN of the RateLimitCounters DynamoDB table"
+  value       = aws_dynamodb_table.rate_limit_counters.arn
+}

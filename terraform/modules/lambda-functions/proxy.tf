@@ -50,6 +50,14 @@ resource "aws_iam_role_policy" "proxy_permissions" {
       {
         Effect = "Allow"
         Action = [
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = var.rate_limit_counters_table_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "secretsmanager:GetSecretValue"
         ]
         Resource = "arn:aws:secretsmanager:*:*:secret:a2a-gateway/*"
@@ -71,6 +79,7 @@ resource "aws_lambda_function" "proxy" {
     variables = {
       AGENT_REGISTRY_TABLE = var.agent_registry_table_name
       PERMISSIONS_TABLE    = var.permissions_table_name
+      RATE_LIMIT_TABLE     = var.rate_limit_counters_table_name
       GATEWAY_DOMAIN       = var.gateway_domain
       LOG_LEVEL            = "INFO"
     }
