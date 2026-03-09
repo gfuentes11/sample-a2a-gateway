@@ -123,9 +123,10 @@ Agent Cards describe the agent's identity, capabilities, and endpoint. You can f
 
 ```bash
 WEATHER_ARN=$(terraform output -raw weather_agent_runtime_arn)
+REGION=$(terraform output -raw aws_region)
 ENCODED_ARN=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$WEATHER_ARN', safe=''))")
 
-curl -s "https://bedrock-agentcore.us-east-1.amazonaws.com/runtimes/$ENCODED_ARN/invocations/.well-known/agent-card.json" \
+curl -s "https://bedrock-agentcore.$REGION.amazonaws.com/runtimes/$ENCODED_ARN/invocations/.well-known/agent-card.json" \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: $(uuidgen)" | jq .
 ```
@@ -136,7 +137,7 @@ Invoke the weather agent using the A2A JSON-RPC protocol:
 
 ```bash
 curl -s -X POST \
-  "https://bedrock-agentcore.us-east-1.amazonaws.com/runtimes/$ENCODED_ARN/invocations/" \
+  "https://bedrock-agentcore.$REGION.amazonaws.com/runtimes/$ENCODED_ARN/invocations/" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: $(uuidgen)" \
