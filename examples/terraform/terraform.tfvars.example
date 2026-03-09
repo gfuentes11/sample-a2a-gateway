@@ -13,6 +13,15 @@ network_mode          = "PUBLIC"
 ecr_repository_name   = "a2a-agents"
 image_tag             = "latest"
 
+# --- VPC Mode (optional) ---
+# To run agents inside a VPC, set network_mode and provide subnet/security group IDs.
+# Subnets must be in supported AZs and ideally be private subnets with NAT Gateway access.
+# See: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/security/agentcore-vpc.md
+#
+# network_mode       = "VPC"
+# subnet_ids         = ["subnet-0123456789abcdef0", "subnet-0123456789abcdef1"]
+# security_group_ids = ["sg-0123456789abcdef0"]
+
 # Notes:
 # - A Cognito User Pool is created automatically with OAuth client_credentials flow
 # - Both agent runtimes are configured with customJWTAuthorizer pointing to Cognito

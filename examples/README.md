@@ -163,6 +163,25 @@ Key details:
 
 With the agents deployed, register them with your existing A2A Gateway instance.
 
+> **Private API Gateway:** If the gateway was deployed with `enable_private_deployment = true`
+> (in `terraform/terraform.tfvars`), the API Gateway uses a `PRIVATE` endpoint type. This means
+> the gateway URL is only resolvable and accessible from within the VPC — you cannot call it
+> from your local machine with `curl`. To interact with a private gateway, either:
+> - Run commands from an EC2 instance or Cloud9 environment inside the VPC
+> - Use a VPN or Direct Connect connection into the VPC
+> - Set `enable_private_deployment = false` to switch back to a `REGIONAL` (public) endpoint
+>
+> **Outbound Connectivity Required:** Lambda functions need outbound internet access to reach
+> Cognito's OAuth token endpoint (`/oauth2/token`) and JWKS URI for authentication. Cognito
+> [is not accessible via AWS PrivateLink](https://docs.aws.amazon.com/cognito/latest/developerguide/vpc-interface-endpoints.html),
+> so your VPC must provide outbound connectivity through one of:
+> - A **NAT Gateway** in a public subnet
+> - A **Transit Gateway** routing to a shared egress VPC
+> - **AWS Direct Connect** or **VPN** with internet breakout
+>
+> Without this, token exchange and JWT validation will fail. See the
+> [VPC Mode section in the main README](../README.md#vpc-mode-private-deployment) for more details.
+
 ### 4a. Get Gateway Credentials
 
 From the gateway's Terraform directory:
@@ -280,6 +299,7 @@ curl "$GATEWAY_URL/agents" \
 curl -X POST "$GATEWAY_URL/agents/weather-agent/message:send" \
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
+  -H "Cache-Control: no-cache" \
   -d '{
     "message": {
       "messageId": "test-001",

@@ -5,6 +5,17 @@ resource "aws_bedrockagentcore_agent_runtime" "a2a_agent" {
   description        = var.description
   role_arn           = var.role_arn
 
+  lifecycle {
+    precondition {
+      condition     = var.network_mode != "VPC" || length(var.subnet_ids) > 0
+      error_message = "subnet_ids must be provided when network_mode is VPC."
+    }
+    precondition {
+      condition     = var.network_mode != "VPC" || length(var.security_group_ids) > 0
+      error_message = "security_group_ids must be provided when network_mode is VPC."
+    }
+  }
+
   agent_runtime_artifact {
     container_configuration {
       container_uri = var.container_uri
@@ -13,6 +24,14 @@ resource "aws_bedrockagentcore_agent_runtime" "a2a_agent" {
 
   network_configuration {
     network_mode = var.network_mode
+
+    dynamic "network_mode_config" {
+      for_each = var.network_mode == "VPC" ? [1] : []
+      content {
+        subnets         = var.subnet_ids
+        security_groups = var.security_group_ids
+      }
+    }
   }
 
   protocol_configuration {

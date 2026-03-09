@@ -55,7 +55,11 @@ def get_weather(city: str) -> dict:
     }
 
 
+model_id = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+logger.info(f"Using model: {model_id}")
+
 strands_agent = Agent(
+    model=model_id,
     tools=[get_weather],
     system_prompt=(
         "You are a helpful weather assistant. Use the get_weather tool "

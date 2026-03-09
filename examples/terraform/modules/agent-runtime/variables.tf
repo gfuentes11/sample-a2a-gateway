@@ -20,9 +20,26 @@ variable "container_uri" {
 }
 
 variable "network_mode" {
-  description = "Network mode (PUBLIC or PRIVATE)"
+  description = "Network mode for the agent runtime (PUBLIC or VPC)"
   type        = string
   default     = "PUBLIC"
+
+  validation {
+    condition     = contains(["PUBLIC", "VPC"], var.network_mode)
+    error_message = "Network mode must be either PUBLIC or VPC."
+  }
+}
+
+variable "subnet_ids" {
+  description = "Subnet IDs for VPC mode (required when network_mode is VPC)"
+  type        = list(string)
+  default     = []
+}
+
+variable "security_group_ids" {
+  description = "Security group IDs for VPC mode (required when network_mode is VPC)"
+  type        = list(string)
+  default     = []
 }
 
 variable "discovery_url" {

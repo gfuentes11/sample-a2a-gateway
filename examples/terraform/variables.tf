@@ -43,14 +43,26 @@ variable "calculator_agent_name" {
 }
 
 variable "network_mode" {
-  description = "Network mode for AgentCore runtimes"
+  description = "Network mode for AgentCore runtimes (PUBLIC or VPC)"
   type        = string
   default     = "PUBLIC"
 
   validation {
-    condition     = contains(["PUBLIC", "PRIVATE"], var.network_mode)
-    error_message = "Network mode must be either PUBLIC or PRIVATE."
+    condition     = contains(["PUBLIC", "VPC"], var.network_mode)
+    error_message = "Network mode must be either PUBLIC or VPC."
   }
+}
+
+variable "subnet_ids" {
+  description = "Subnet IDs for VPC mode. Required when network_mode is VPC. Use private subnets in supported AZs."
+  type        = list(string)
+  default     = []
+}
+
+variable "security_group_ids" {
+  description = "Security group IDs for VPC mode. Required when network_mode is VPC."
+  type        = list(string)
+  default     = []
 }
 
 variable "image_tag" {
@@ -63,4 +75,16 @@ variable "ecr_repository_name" {
   description = "Base name for ECR repositories"
   type        = string
   default     = "a2a-agents"
+}
+
+variable "bedrock_model_id" {
+  description = "Bedrock cross-region inference profile ID for agent model invocation"
+  type        = string
+  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+}
+
+variable "bedrock_cris_regions" {
+  description = "Destination regions for the US geographic cross-region inference profile"
+  type        = list(string)
+  default     = ["us-east-1", "us-east-2", "us-west-2"]
 }

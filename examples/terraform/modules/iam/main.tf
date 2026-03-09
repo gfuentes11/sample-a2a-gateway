@@ -1,3 +1,8 @@
+locals {
+  # Strip geographic prefix (e.g., "us.") from the inference profile ID to get the foundation model ID
+  foundation_model_id = replace(var.bedrock_model_id, "/^[a-z]+\\./", "")
+}
+
 resource "aws_iam_role" "agent_execution" {
   name = var.role_name
 
@@ -22,11 +27,6 @@ resource "aws_iam_role" "agent_execution" {
   })
 
   tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "managed" {
-  role       = aws_iam_role.agent_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/BedrockAgentCoreFullAccess"
 }
 
 resource "aws_iam_role_policy" "execution" {
@@ -68,19 +68,24 @@ resource "aws_iam_role_policy" "execution" {
         Condition = { StringEquals = { "cloudwatch:namespace" = "bedrock-agentcore" } }
       },
       {
-        Sid      = "BedrockModelInvocation"
+        Sid      = "BedrockCrisInferenceProfileAccess"
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-        Resource = "*"
+        Resource = "arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/${var.bedrock_model_id}"
       },
       {
-        Sid    = "GetAgentAccessToken"
+        Sid    = "BedrockCrisModelAccess"
         Effect = "Allow"
-        Action = ["bedrock-agentcore:GetWorkloadAccessToken", "bedrock-agentcore:GetWorkloadAccessTokenForJWT", "bedrock-agentcore:GetWorkloadAccessTokenForUserId"]
+        Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
         Resource = [
-          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default",
-          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default/workload-identity/*"
+          for r in var.bedrock_cris_regions :
+          "arn:aws:bedrock:${r}::foundation-model/${local.foundation_model_id}"
         ]
+        Condition = {
+          StringEquals = {
+            "bedrock:InferenceProfileArn" = "arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/${var.bedrock_model_id}"
+          }
+        }
       }
     ]
   })

@@ -36,7 +36,11 @@ def calculate(expression: str) -> dict:
         return {"expression": expression, "error": str(e)}
 
 
+model_id = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+logger.info(f"Using model: {model_id}")
+
 strands_agent = Agent(
+    model=model_id,
     tools=[calculate],
     system_prompt=(
         "You are a helpful calculator assistant. Use the calculate tool "

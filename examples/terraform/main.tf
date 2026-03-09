@@ -47,21 +47,25 @@ module "ecr_calculator" {
 module "iam_weather" {
   source = "./modules/iam"
 
-  role_name          = "${var.stack_name}-weather-execution-role"
-  account_id         = data.aws_caller_identity.current.id
-  region             = data.aws_region.current.id
-  ecr_repository_arn = module.ecr_weather.repository_arn
-  tags               = { Name = "${var.stack_name}-weather-execution-role" }
+  role_name            = "${var.stack_name}-weather-execution-role"
+  account_id           = data.aws_caller_identity.current.id
+  region               = data.aws_region.current.id
+  ecr_repository_arn   = module.ecr_weather.repository_arn
+  bedrock_model_id     = var.bedrock_model_id
+  bedrock_cris_regions = var.bedrock_cris_regions
+  tags                 = { Name = "${var.stack_name}-weather-execution-role" }
 }
 
 module "iam_calculator" {
   source = "./modules/iam"
 
-  role_name          = "${var.stack_name}-calculator-execution-role"
-  account_id         = data.aws_caller_identity.current.id
-  region             = data.aws_region.current.id
-  ecr_repository_arn = module.ecr_calculator.repository_arn
-  tags               = { Name = "${var.stack_name}-calculator-execution-role" }
+  role_name            = "${var.stack_name}-calculator-execution-role"
+  account_id           = data.aws_caller_identity.current.id
+  region               = data.aws_region.current.id
+  ecr_repository_arn   = module.ecr_calculator.repository_arn
+  bedrock_model_id     = var.bedrock_model_id
+  bedrock_cris_regions = var.bedrock_cris_regions
+  tags                 = { Name = "${var.stack_name}-calculator-execution-role" }
 }
 
 # ============================================================================
@@ -113,6 +117,8 @@ module "weather_runtime" {
   role_arn           = module.iam_weather.role_arn
   container_uri      = "${module.ecr_weather.repository_url}:${var.image_tag}"
   network_mode       = var.network_mode
+  subnet_ids         = var.subnet_ids
+  security_group_ids = var.security_group_ids
   discovery_url      = module.cognito.discovery_url
   allowed_clients    = [module.cognito.client_id]
   region             = data.aws_region.current.id
@@ -133,6 +139,8 @@ module "calculator_runtime" {
   role_arn           = module.iam_calculator.role_arn
   container_uri      = "${module.ecr_calculator.repository_url}:${var.image_tag}"
   network_mode       = var.network_mode
+  subnet_ids         = var.subnet_ids
+  security_group_ids = var.security_group_ids
   discovery_url      = module.cognito.discovery_url
   allowed_clients    = [module.cognito.client_id]
   region             = data.aws_region.current.id
