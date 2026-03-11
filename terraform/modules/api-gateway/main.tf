@@ -256,7 +256,9 @@ resource "aws_api_gateway_integration" "agents_proxy_any" {
   # IAM credentials required for streaming invocation
   credentials = aws_iam_role.proxy_invocation.arn
   
-  # Timeout
+  # Timeout: Default 29s. For long-running agent calls, request a quota increase
+  # for "Amazon API Gateway - REST API integration timeout" in AWS Service Quotas
+  # console, then increase this value (max 300000 for 5 minutes).
   timeout_milliseconds = 29000
 
   lifecycle {
